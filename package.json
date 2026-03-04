@@ -1,0 +1,26 @@
+{
+  "name": "stalkerino",
+  "version": "1.0.0",
+  "description": "Site monitoring bot using Playwright and Stagehand",
+  "type": "module",
+  "scripts": {
+    "start": "tsx runner.ts",
+    "login": "tsx login.ts",
+    "chrome": "tsx launch-chrome.ts"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "^1.13.0",
+    "js-yaml": "^4.1.0",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.50.0",
+    "tsx": "^4.19.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.13.9",
+    "@types/node-cron": "^3.0.11",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.9.3"
+  }
+}

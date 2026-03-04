@@ -1,0 +1,40 @@
+# Stalkerino configuration
+# Copy this file to config.yaml and fill in your values.
+
+# Run schedule — cron expression (default: every 5 minutes)
+schedule: "*/5 * * * *"
+
+# Path to your system Chrome executable.
+# Windows: 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+# macOS:   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+# Linux:   '/usr/bin/google-chrome'
+chromePath: 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+
+# OpenAI API key (only required if using the ai-powered x adapter)
+modelApiKey: 'sk-...'
+modelName: 'gpt-4o-mini'
+
+adapters:
+  # x-dom: scrapes X (Twitter) profiles via DOM — no AI, reliable IDs
+  x-dom:
+    enabled: true
+    targets:
+      - naval
+      - base
+
+  # x: AI-powered extraction via Stagehand (requires modelApiKey)
+  x:
+    enabled: false
+    targets:
+      - naval
+
+  # reddit: not yet implemented
+  reddit:
+    enabled: false
+    targets:
+      - r/javascript
+
+notifications:
+  telegram:
+    token: "YOUR_TELEGRAM_BOT_TOKEN"
+    chat_id: "YOUR_CHAT_ID"

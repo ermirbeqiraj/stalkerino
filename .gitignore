@@ -1,0 +1,9 @@
+node_modules/
+.sessions/
+.chrome-profile/
+.project/state.json
+.project/config.yaml
+.project/notifications.log
+.claude/
+downloads/
+_write_config.cjs
