@@ -6,6 +6,7 @@ import { z } from "zod";
 import { configureTelegram, notifyItem, notifySessionError } from "./notify.ts";
 import type { Adapter, Item } from "./adapters/base.ts";
 import { BrowserManager, type BrowserMode } from "./adapters/browser-manager.ts";
+import { FirebaseStateStore, type StateStore, type State } from "./state-store.ts";
 
 // ---------------------------------------------------------------------------
 // Config schema
@@ -28,6 +29,12 @@ const ConfigSchema = z.object({
   modelApiKey: z.string({
     required_error: "modelApiKey is required in .project/config.yaml — set it to your OpenAI API key.",
   }),
+  firebaseUrl: z.string({
+    required_error: "firebaseUrl is required in .project/config.yaml — set it to your Firebase Realtime DB URL.",
+  }),
+  firebaseSecret: z.string({
+    required_error: "firebaseSecret is required in .project/config.yaml — set it to your Firebase database secret.",
+  }),
   adapters: z.record(AdapterConfigSchema).default({}),
   notifications: z
     .object({
@@ -48,7 +55,6 @@ type Config = z.infer<typeof ConfigSchema>;
 // ---------------------------------------------------------------------------
 
 const CONFIG_PATH = path.resolve(".project/config.yaml");
-const STATE_PATH = path.resolve(".project/state.json");
 
 // ---------------------------------------------------------------------------
 // Config loading
@@ -60,49 +66,6 @@ function loadConfig(): Config {
   }
   const raw = yaml.load(fs.readFileSync(CONFIG_PATH, "utf-8"));
   return ConfigSchema.parse(raw);
-}
-
-// ---------------------------------------------------------------------------
-// State management
-// ---------------------------------------------------------------------------
-
-type State = Record<string, string>;
-
-function loadState(): State {
-  if (!fs.existsSync(STATE_PATH)) {
-    return {};
-  }
-  try {
-    return JSON.parse(fs.readFileSync(STATE_PATH, "utf-8"));
-  } catch {
-    console.warn("[runner] Could not parse state.json — starting fresh");
-    return {};
-  }
-}
-
-function saveState(state: State): void {
-  // Prune entries whose post ID (snowflake) is older than 48 hours.
-  // Snowflake timestamp: (BigInt(id) >> 22n) + TWITTER_EPOCH_MS
-  const TWITTER_EPOCH = 1288834974657n;
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-
-  const trimmed: State = {};
-  for (const [key, val] of Object.entries(state)) {
-    // key format: "adapter:target:postId"
-    const postId = key.split(":").at(-1) ?? "";
-    try {
-      const postMs = Number((BigInt(postId) >> 22n) + TWITTER_EPOCH);
-      if (postMs >= cutoff) {
-        trimmed[key] = val;
-      }
-    } catch {
-      // Non-snowflake key (e.g. from other adapters) — keep it
-      trimmed[key] = val;
-    }
-  }
-
-  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-  fs.writeFileSync(STATE_PATH, JSON.stringify(trimmed, null, 2), "utf-8");
 }
 
 // ---------------------------------------------------------------------------
@@ -129,8 +92,8 @@ async function loadAdapter(id: string): Promise<Adapter | null> {
 // Main run function
 // ---------------------------------------------------------------------------
 
-async function runAdapters(config: Config): Promise<void> {
-  const state = loadState();
+async function runAdapters(config: Config, store: StateStore): Promise<void> {
+  const state = await store.load();
   const stateUpdates: State = { ...state };
 
   const enabledAdapters = Object.entries(config.adapters).filter(
@@ -189,7 +152,7 @@ async function runAdapters(config: Config): Promise<void> {
           console.log(`[${id}] Notified ${newCount} new item(s).`);
         }
 
-        saveState(stateUpdates);
+        await store.save(stateUpdates);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`[${id}] Adapter error:`, message);
@@ -227,20 +190,17 @@ async function main(): Promise<void> {
     console.warn("[runner] No Telegram config — notifications will be skipped.");
   }
 
-  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-  if (!fs.existsSync(STATE_PATH)) {
-    fs.writeFileSync(STATE_PATH, "{}", "utf-8");
-    console.log("[runner] Created empty state.json");
-  }
+  const store = new FirebaseStateStore(config.firebaseUrl, config.firebaseSecret);
+  console.log(`[runner] State store: Firebase (${config.firebaseUrl})`);
 
   console.log(`[runner] Schedule: ${config.schedule}`);
   console.log("[runner] Running immediately on startup...");
-  await runAdapters(config);
+  await runAdapters(config, store);
 
   cron.schedule(config.schedule, async () => {
     console.log(`[runner] Cron tick at ${new Date().toISOString()}`);
     try {
-      await runAdapters(config);
+      await runAdapters(config, store);
     } catch (err) {
       console.error("[runner] Unexpected error in scheduled run:", err);
     }

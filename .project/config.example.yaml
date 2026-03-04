@@ -17,6 +17,12 @@ headless: false
 modelApiKey: 'sk-...'
 modelName: 'gpt-4o-mini'
 
+# Firebase Realtime Database — used for persistent seen-post state
+# Create a project at https://console.firebase.google.com
+# Secret: Project Settings > Service Accounts > Database secrets
+firebaseUrl: 'https://YOUR-PROJECT-default-rtdb.YOUR-REGION.firebasedatabase.app'
+firebaseSecret: 'YOUR_DATABASE_SECRET'
+
 adapters:
   # x-dom: scrapes X (Twitter) profiles via DOM — no AI, reliable IDs
   x-dom:
