@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const knownAdapters = ["x", "reddit"];
+  const knownAdapters = ["x-dom", "reddit"];
   if (!knownAdapters.includes(adapterId)) {
     console.warn(
       `[login] Warning: "${adapterId}" is not a known adapter (${knownAdapters.join(", ")}). Continuing anyway.`
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   configureChrome(chromePath);
 
   const startUrls: Record<string, string> = {
-    x: "https://x.com/login",
+    "x-dom": "https://x.com/login",
     reddit: "https://www.reddit.com/login",
   };
   const startUrl = startUrls[adapterId];

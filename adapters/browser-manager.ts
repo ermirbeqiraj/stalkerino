@@ -1,4 +1,4 @@
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { Stagehand } from "@browserbasehq/stagehand";
 import fs from "fs";
 import path from "path";
@@ -17,7 +17,7 @@ export type BrowserMode = "chrome" | "stagehand";
  * stagehand → same Chrome binary, but wrapped in Stagehand for AI extraction.
  */
 export type AdapterRunContext =
-  | { mode: "chrome"; page: Page }
+  | { mode: "chrome"; context: BrowserContext; page: Page }
   | { mode: "stagehand"; stagehand: Stagehand; page: Page };
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,7 @@ export class BrowserManager {
   private modelApiKey: string;
 
   private browser: Browser | null = null;
+  private contexts: BrowserContext[] = [];
   private stagheands = new Map<string, Stagehand>();
 
   constructor(opts: { chromePath: string; headless: boolean; modelName: string; modelApiKey: string }) {
@@ -72,17 +73,21 @@ export class BrowserManager {
 
   /**
    * Returns a ready AdapterRunContext for the given adapter and mode.
-   * Reuses existing instances where possible.
+   * Throws if .sessions/<adapterId>.json does not exist.
    */
   async getContext(adapterId: string, mode: BrowserMode): Promise<AdapterRunContext> {
+    const sPath = path.join(SESSIONS_DIR, `${adapterId}.json`);
+    if (!fs.existsSync(sPath)) {
+      throw new Error(
+        `Session not found for adapter "${adapterId}". Run: npm run login -- ${adapterId}`
+      );
+    }
     if (mode === "chrome") {
       const browser = await this.ensureBrowser();
-      const sPath = path.join(SESSIONS_DIR, `${adapterId}.json`);
-      const context = await browser.newContext(
-        fs.existsSync(sPath) ? { storageState: sPath } : {}
-      );
+      const context = await browser.newContext({ storageState: sPath });
+      this.contexts.push(context);
       const page = await context.newPage();
-      return { mode: "chrome", page };
+      return { mode: "chrome", context, page };
     }
 
     // stagehand — one Stagehand per adapter id, lazily created
@@ -99,12 +104,9 @@ export class BrowserManager {
       });
       await sh.init();
 
-      const sPath = path.join(SESSIONS_DIR, `${adapterId}.json`);
-      if (fs.existsSync(sPath)) {
-        const sessionData = JSON.parse(fs.readFileSync(sPath, "utf-8"));
-        if (sessionData.cookies?.length) {
-          await sh.context.addCookies(sessionData.cookies);
-        }
+      const sessionData = JSON.parse(fs.readFileSync(sPath, "utf-8"));
+      if (sessionData.cookies?.length) {
+        await sh.context.addCookies(sessionData.cookies);
       }
 
       this.stagheands.set(adapterId, sh);
@@ -121,6 +123,11 @@ export class BrowserManager {
       await sh.close().catch(() => {});
     }
     this.stagheands.clear();
+
+    for (const ctx of this.contexts) {
+      await ctx.close().catch(() => {});
+    }
+    this.contexts = [];
 
     if (this.browser) {
       await this.browser.close().catch(() => {});

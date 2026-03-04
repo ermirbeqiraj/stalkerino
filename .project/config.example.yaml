@@ -26,14 +26,7 @@ adapters:
       - naval
       - base
 
-  # x: AI-powered extraction via Stagehand (requires modelApiKey)
-  x:
-    enabled: false
-    browser: stagehand
-    targets:
-      - naval
-
-  # reddit: not yet implemented
+  # reddit: AI-powered extraction via Stagehand (requires modelApiKey)
   reddit:
     enabled: false
     browser: stagehand

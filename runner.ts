@@ -155,16 +155,25 @@ async function runAdapters(config: Config): Promise<void> {
         const items: Item[] = await adapter.check(ctx, adapterConfig.targets);
 
         let newCount = 0;
+        const notifiedTargets = new Set<string>();
         for (const item of items) {
           const alreadySeen = !!state[item.id];
           stateUpdates[item.id] = item.id;
 
           if (alreadySeen) continue;
 
+          const target = (item.meta?.target as string | undefined) ?? id;
+
+          // Only notify the latest (first) new post per target per cycle
+          if (notifiedTargets.has(target)) {
+            console.log(`[${id}] Skipping extra new post for @${target} (already notified latest)`);
+            continue;
+          }
+          notifiedTargets.add(target);
+
           newCount++;
           console.log(`[${id}] New item: ${item.id}`);
 
-          const target = (item.meta?.target as string | undefined) ?? id;
           await notifyItem({ adapterId: id, target, content: item.content, url: item.url });
         }
 

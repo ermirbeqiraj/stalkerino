@@ -40,7 +40,7 @@ export async function notify(message: string): Promise<void> {
         chat_id: telegramChatId,
         text: message,
         parse_mode: "HTML",
-        disable_web_page_preview: false,
+        disable_web_page_preview: true,
       }),
     });
 
@@ -53,17 +53,22 @@ export async function notify(message: string): Promise<void> {
   }
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export function buildMessage(opts: NotifyOptions): string {
   const lines: string[] = [
-    `📡 <b>Stalkerino</b>`,
-    `Adapter: <code>${opts.adapterId}</code>`,
-    `Target: <code>${opts.target}</code>`,
+    `📡 <b>@${escapeHtml(opts.target)}</b>`,
     ``,
-    opts.content,
+    escapeHtml(opts.content),
   ];
 
   if (opts.url) {
-    lines.push(``, `🔗 <a href="${opts.url}">${opts.url}</a>`);
+    lines.push(``, opts.url);
   }
 
   return lines.join("\n");

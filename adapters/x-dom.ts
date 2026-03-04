@@ -8,6 +8,14 @@
 import { type Adapter, type Item, isLoginPage } from "./base.ts";
 import type { AdapterRunContext } from "./browser-manager.ts";
 
+// Twitter snowflake IDs encode creation time: (id >> 22) + EPOCH = ms since Unix epoch
+const SNOWFLAKE_EPOCH = 1288834974657n;
+const MAX_POST_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function snowflakeToMs(id: string): number {
+  return Number((BigInt(id) >> 22n) + SNOWFLAKE_EPOCH);
+}
+
 const xDomAdapter: Adapter = {
   id: "x-dom",
 
@@ -15,7 +23,7 @@ const xDomAdapter: Adapter = {
     if (ctx.mode !== "chrome") {
       throw new Error("x-dom adapter requires browser: chrome");
     }
-    const { page } = ctx;
+    const { context } = ctx;
 
     const items: Item[] = [];
 
@@ -23,7 +31,12 @@ const xDomAdapter: Adapter = {
         const profileUrl = `https://x.com/${target}`;
         console.log(`[x-dom] Checking ${profileUrl}`);
 
+        // Fresh page per target — a crashed/closed page never blocks subsequent targets
+        const page = await context.newPage();
+        try {
+
         await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
+        await page.waitForLoadState("networkidle").catch(() => null);
 
         // Wait for at least one tweet article to appear
         await page.waitForSelector("article[data-testid='tweet']", { timeout: 15000 })
@@ -79,13 +92,34 @@ const xDomAdapter: Adapter = {
           return results;
         }, target);
 
+        console.log(`[x-dom] Found ${posts.length} post(s) on @${target}`);
         for (const post of posts) {
+          const ageMs = Date.now() - snowflakeToMs(post.id);
+          const ageStr = ageMs < 3600000
+            ? `${Math.round(ageMs / 60000)}m`
+            : `${(ageMs / 3600000).toFixed(1)}h`;
+          if (ageMs > MAX_POST_AGE_MS) {
+            console.log(`[x-dom]   SKIP  ${post.id} (${ageStr} old) — ${post.text.slice(0, 60).replace(/\n/g, " ")}`);
+            continue;
+          }
+          console.log(`[x-dom]   KEEP  ${post.id} (${ageStr} old) — ${post.text.slice(0, 60).replace(/\n/g, " ")}`);
           items.push({
             id: `x-dom:${target}:${post.id}`,
             content: post.text,
             url: post.url,
             meta: { target },
           });
+        }
+
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Session/login errors should bubble up and stop the whole adapter
+          if (msg.toLowerCase().includes("session") || msg.toLowerCase().includes("login")) {
+            throw err;
+          }
+          console.error(`[x-dom] Error on @${target}: ${msg}`);
+        } finally {
+          await page.close().catch(() => {});
         }
       }
 
