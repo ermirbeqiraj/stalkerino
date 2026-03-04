@@ -26,7 +26,6 @@ const redditAdapter: Adapter = {
     const items: Item[] = [];
 
     for (const target of targets) {
-        // Normalise target: accept "r/javascript" or "javascript"
         const subreddit = target.startsWith("r/") ? target : `r/${target}`;
         const url = `https://www.reddit.com/${subreddit}/new`;
         console.log(`[reddit] Checking ${url}`);
@@ -59,7 +58,6 @@ const redditAdapter: Adapter = {
         for (const post of result.posts ?? []) {
           if (!post.id || !post.title) continue;
 
-          // Extract clean post ID from URL if possible
           const idMatch = post.url?.match(/comments\/([a-z0-9]+)\//i);
           const normalizedId = idMatch ? idMatch[1] : post.id;
 

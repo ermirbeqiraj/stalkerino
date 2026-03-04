@@ -29,8 +29,8 @@ adapters:
     enabled: true
     browser: chrome
     targets:
-      - naval
-      - base
+      - handle1
+      - handl2
 
   # reddit: AI-powered extraction via Stagehand (requires modelApiKey)
   reddit:

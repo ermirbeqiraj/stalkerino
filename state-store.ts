@@ -5,19 +5,14 @@ export interface StateStore {
   save(state: State): Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
-// Pruning (shared logic)
-// ---------------------------------------------------------------------------
-
 const TWITTER_EPOCH = 1288834974657n;
-const PRUNE_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
+const PRUNE_AGE_MS = 48 * 60 * 60 * 1000;
 
 function pruneState(state: State): State {
   const cutoff = Date.now() - PRUNE_AGE_MS;
   const pruned: State = {};
 
   for (const [key, val] of Object.entries(state)) {
-    // key format: "adapter:target:postId"
     const postId = key.split(":").at(-1) ?? "";
     try {
       const postMs = Number((BigInt(postId) >> 22n) + TWITTER_EPOCH);
@@ -25,7 +20,6 @@ function pruneState(state: State): State {
         pruned[key] = val;
       }
     } catch {
-      // Non-snowflake key (non-Twitter adapters) — always keep
       pruned[key] = val;
     }
   }
@@ -33,16 +27,11 @@ function pruneState(state: State): State {
   return pruned;
 }
 
-// ---------------------------------------------------------------------------
-// FirebaseStateStore
-// ---------------------------------------------------------------------------
-
 export class FirebaseStateStore implements StateStore {
   private readonly url: string;
   private readonly secret: string;
 
   constructor(firebaseUrl: string, firebaseSecret: string) {
-    // Normalise: strip trailing slash, append path
     const base = firebaseUrl.replace(/\/$/, "");
     this.url = `${base}/stalkerino/state.json`;
     this.secret = firebaseSecret;
@@ -58,7 +47,6 @@ export class FirebaseStateStore implements StateStore {
 
     const data = await res.json();
 
-    // Firebase returns null when the node doesn't exist yet
     if (data === null) {
       console.log("[state-store] No existing state in Firebase — starting fresh.");
       return {};

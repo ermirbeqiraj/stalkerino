@@ -8,10 +8,6 @@ import type { Adapter, Item } from "./adapters/base.ts";
 import { BrowserManager, type BrowserMode } from "./adapters/browser-manager.ts";
 import { FirebaseStateStore, type StateStore, type State } from "./state-store.ts";
 
-// ---------------------------------------------------------------------------
-// Config schema
-// ---------------------------------------------------------------------------
-
 const AdapterConfigSchema = z.object({
   enabled: z.boolean().default(false),
   browser: z.enum(["chrome", "stagehand"]).default("chrome"),
@@ -50,15 +46,7 @@ const ConfigSchema = z.object({
 
 type Config = z.infer<typeof ConfigSchema>;
 
-// ---------------------------------------------------------------------------
-// Paths
-// ---------------------------------------------------------------------------
-
 const CONFIG_PATH = path.resolve(".project/config.yaml");
-
-// ---------------------------------------------------------------------------
-// Config loading
-// ---------------------------------------------------------------------------
 
 function loadConfig(): Config {
   if (!fs.existsSync(CONFIG_PATH)) {
@@ -67,10 +55,6 @@ function loadConfig(): Config {
   const raw = yaml.load(fs.readFileSync(CONFIG_PATH, "utf-8"));
   return ConfigSchema.parse(raw);
 }
-
-// ---------------------------------------------------------------------------
-// Adapter loading
-// ---------------------------------------------------------------------------
 
 async function loadAdapter(id: string): Promise<Adapter | null> {
   const adapterPath = `./adapters/${id}.ts`;
@@ -87,10 +71,6 @@ async function loadAdapter(id: string): Promise<Adapter | null> {
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Main run function
-// ---------------------------------------------------------------------------
 
 async function runAdapters(config: Config, store: StateStore): Promise<void> {
   const state = await store.load();
@@ -133,7 +113,6 @@ async function runAdapters(config: Config, store: StateStore): Promise<void> {
 
           const target = (item.meta?.target as string | undefined) ?? id;
 
-          // Only notify the latest (first) new post per target per cycle
           if (notifiedTargets.has(target)) {
             console.log(`[${id}] Skipping extra new post for @${target} (already notified latest)`);
             continue;
@@ -171,10 +150,6 @@ async function runAdapters(config: Config, store: StateStore): Promise<void> {
     await manager.closeAll();
   }
 }
-
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
   const config = loadConfig();

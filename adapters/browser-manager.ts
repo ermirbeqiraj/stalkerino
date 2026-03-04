@@ -5,37 +5,12 @@ import path from "path";
 
 const SESSIONS_DIR = path.resolve(".sessions");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type BrowserMode = "chrome" | "stagehand";
 
-/**
- * What an adapter receives when it's invoked.
- * chrome    → plain Playwright Page backed by the real Chrome binary.
- * stagehand → same Chrome binary, but wrapped in Stagehand for AI extraction.
- */
 export type AdapterRunContext =
   | { mode: "chrome"; context: BrowserContext; page: Page }
   | { mode: "stagehand"; stagehand: Stagehand; page: Page };
 
-// ---------------------------------------------------------------------------
-// BrowserManager
-// ---------------------------------------------------------------------------
-
-/**
- * Created once per run cycle by runner.ts.
- * Lazily spins up browser resources as adapters ask for them,
- * then tears everything down via closeAll() at the end of the cycle.
- *
- * - chrome: one shared Browser, one Context+Page per adapter (so each
- *   adapter gets its own storageState / cookie jar).
- * - stagehand: one Stagehand instance per adapter (Stagehand owns its
- *   own browser process internally).
- *
- * All instances use chromePath — never Playwright's bundled Chromium.
- */
 export class BrowserManager {
   private chromePath: string;
   private headless: boolean;
@@ -53,10 +28,6 @@ export class BrowserManager {
     this.modelApiKey = opts.modelApiKey;
   }
 
-  // -------------------------------------------------------------------------
-  // Internal
-  // -------------------------------------------------------------------------
-
   private async ensureBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await chromium.launch({
@@ -67,14 +38,6 @@ export class BrowserManager {
     return this.browser;
   }
 
-  // -------------------------------------------------------------------------
-  // Public
-  // -------------------------------------------------------------------------
-
-  /**
-   * Returns a ready AdapterRunContext for the given adapter and mode.
-   * Throws if .sessions/<adapterId>.json does not exist.
-   */
   async getContext(adapterId: string, mode: BrowserMode): Promise<AdapterRunContext> {
     const sPath = path.join(SESSIONS_DIR, `${adapterId}.json`);
     if (!fs.existsSync(sPath)) {
@@ -90,7 +53,6 @@ export class BrowserManager {
       return { mode: "chrome", context, page };
     }
 
-    // stagehand — one Stagehand per adapter id, lazily created
     let sh = this.stagheands.get(adapterId);
     if (!sh) {
       sh = new Stagehand({
@@ -115,9 +77,6 @@ export class BrowserManager {
     return { mode: "stagehand", stagehand: sh, page: sh.page };
   }
 
-  /**
-   * Shuts down all browser processes. Called by runner.ts after each run cycle.
-   */
   async closeAll(): Promise<void> {
     for (const sh of this.stagheands.values()) {
       await sh.close().catch(() => {});

@@ -95,7 +95,6 @@ adapters:
     browser: chrome    # chrome | stagehand
     targets:
       - naval
-      - base
 ```
 
 Restart `npm start` to pick up config changes.

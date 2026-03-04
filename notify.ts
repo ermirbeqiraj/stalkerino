@@ -2,12 +2,11 @@ import fs from "fs";
 import path from "path";
 
 const LOG_PATH = path.resolve(".project/notifications.log");
-const LOG_MAX_BYTES = 500 * 1024; // 500 KB
+const LOG_MAX_BYTES = 500 * 1024;
 
 function appendToLog(entry: string): void {
   fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
 
-  // Roll: if file exceeds limit, keep only the second half (drop oldest entries)
   if (fs.existsSync(LOG_PATH)) {
     const size = fs.statSync(LOG_PATH).size;
     if (size > LOG_MAX_BYTES) {
@@ -35,7 +34,6 @@ export function configureTelegram(token: string, chatId: string): void {
 }
 
 export async function notify(message: string): Promise<void> {
-  // Always append to log file regardless of Telegram config
   const timestamp = new Date().toISOString();
   const logEntry = `[${timestamp}]\n${message}\n${"─".repeat(60)}\n`;
   appendToLog(logEntry);

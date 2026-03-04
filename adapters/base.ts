@@ -17,14 +17,8 @@ export interface Adapter {
 
 const SESSIONS_DIR = path.resolve(".sessions");
 
-// Stored by configureChrome() \u2014 only needed by login.ts for the CDP login flow.
-// The monitoring runner passes chromePath directly to BrowserManager.
 let chromeExecutablePath: string | null = null;
 
-/**
- * Called by login.ts before a CDP login session.
- * The monitoring runner does NOT need to call this.
- */
 export function configureChrome(executablePath: string): void {
   if (!executablePath) {
     throw new Error(
@@ -47,11 +41,6 @@ const LOGIN_URLS: Record<string, string> = {
   reddit: "https://www.reddit.com/login",
 };
 
-/**
- * Connect to a Chrome instance running with --remote-debugging-port=9222
- * (started via `npm run chrome`) and save storageState after login.
- * Chrome was not launched by Playwright, so no automation flags are injected.
- */
 export async function loginBrowserCDP(
   adapterId: string,
   startUrl?: string,
@@ -91,9 +80,6 @@ export async function loginBrowserCDP(
   await browser.close();
 }
 
-/**
- * Detect common "session expired / not logged in" redirect patterns.
- */
 export function isLoginPage(url: string): boolean {
   const loginPatterns = [
     /login/i,
