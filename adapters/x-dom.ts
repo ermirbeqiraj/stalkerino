@@ -5,22 +5,21 @@
  * the DOM, so they are always exact numeric IDs — no AI hallucination possible.
  * Post text is read from the tweet-text element in the same article node.
  */
-import type { Page } from "playwright";
-import { type Adapter, type Item, createPage, isLoginPage } from "./base.ts";
+import { type Adapter, type Item, isLoginPage } from "./base.ts";
+import type { AdapterRunContext } from "./browser-manager.ts";
 
 const xDomAdapter: Adapter = {
   id: "x-dom",
 
-  async check(_page: Page, targets: string[]): Promise<Item[]> {
-    const page = await createPage("x");
-    if (!page) {
-      throw new Error("Session not available — run: npm run login -- x");
+  async check(ctx: AdapterRunContext, targets: string[]): Promise<Item[]> {
+    if (ctx.mode !== "chrome") {
+      throw new Error("x-dom adapter requires browser: chrome");
     }
+    const { page } = ctx;
 
     const items: Item[] = [];
 
-    try {
-      for (const target of targets) {
+    for (const target of targets) {
         const profileUrl = `https://x.com/${target}`;
         console.log(`[x-dom] Checking ${profileUrl}`);
 
@@ -89,9 +88,6 @@ const xDomAdapter: Adapter = {
           });
         }
       }
-    } finally {
-      await page.context().browser()?.close();
-    }
 
     return items;
   },

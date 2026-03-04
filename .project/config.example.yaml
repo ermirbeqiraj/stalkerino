@@ -10,6 +10,9 @@ schedule: "*/5 * * * *"
 # Linux:   '/usr/bin/google-chrome'
 chromePath: 'C:\Program Files\Google\Chrome\Application\chrome.exe'
 
+# Run Chrome visibly (false) or headless (true). Use false to avoid bot detection.
+headless: false
+
 # OpenAI API key (only required if using the ai-powered x adapter)
 modelApiKey: 'sk-...'
 modelName: 'gpt-4o-mini'
@@ -18,6 +21,7 @@ adapters:
   # x-dom: scrapes X (Twitter) profiles via DOM — no AI, reliable IDs
   x-dom:
     enabled: true
+    browser: chrome
     targets:
       - naval
       - base
@@ -25,12 +29,14 @@ adapters:
   # x: AI-powered extraction via Stagehand (requires modelApiKey)
   x:
     enabled: false
+    browser: stagehand
     targets:
       - naval
 
   # reddit: not yet implemented
   reddit:
     enabled: false
+    browser: stagehand
     targets:
       - r/javascript
 

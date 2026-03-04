@@ -4,10 +4,11 @@ A site monitoring bot that watches X (Twitter) profiles for new posts and sends 
 
 ## How it works
 
-- Connects to your local Chrome instance via CDP (no automation flags — Google/X see a real browser)
+- Launches your real Chrome binary (`chromePath`) via Playwright — no bundled Chromium, no automation flags
 - Scrapes post IDs directly from the DOM (`/status/<id>` links) — no AI hallucination
 - Deduplicates against local state, notifies only on new posts
 - Runs on a cron schedule (default: every 5 minutes)
+- Each run cycle spins up Chrome, does its work, then closes it cleanly
 
 ## Requirements
 
@@ -21,7 +22,6 @@ A site monitoring bot that watches X (Twitter) profiles for new posts and sends 
 
 ```bash
 npm install
-npx playwright install chromium
 ```
 
 ### 2. Configure
@@ -31,9 +31,10 @@ cp .project/config.example.yaml .project/config.yaml
 ```
 
 Edit `.project/config.yaml`:
-- Set `chromePath` to your Chrome executable
+- Set `chromePath` to your Chrome executable path
+- Set `headless: false` (recommended) or `true`
 - Set `notifications.telegram.token` and `chat_id`
-- Add targets under `x-dom.targets`
+- Add target handles under `x-dom.targets`
 
 ### 3. Log in to X
 
@@ -64,14 +65,15 @@ The bot runs immediately on startup, then on the configured cron schedule.
 
 ```
 adapters/
-  base.ts        — shared browser helpers (CDP login, page creation, Stagehand)
-  x-dom.ts       — X adapter using DOM scraping (recommended)
-  x.ts           — X adapter using AI extraction via Stagehand (disabled)
-  reddit.ts      — Reddit adapter (not yet implemented)
+  browser-manager.ts — owns Chrome/Stagehand lifecycle per run cycle
+  base.ts            — shared types and login helpers
+  x-dom.ts           — X adapter using DOM scraping (recommended, browser: chrome)
+  x.ts               — X adapter using AI extraction via Stagehand (browser: stagehand)
+  reddit.ts          — Reddit adapter (browser: stagehand)
 runner.ts        — cron scheduler, config loading, state management
 notify.ts        — Telegram notifications + local log
-login.ts         — interactive login flow
-launch-chrome.ts — launches Chrome with remote debugging port
+login.ts         — interactive login flow (one-time setup per adapter)
+launch-chrome.ts — launches Chrome with remote debugging port (used by login flow)
 .project/
   config.yaml         — your local config (gitignored)
   config.example.yaml — template
@@ -80,18 +82,20 @@ launch-chrome.ts — launches Chrome with remote debugging port
 .sessions/       — saved browser sessions (gitignored)
 ```
 
-## Adding targets
-
-Edit `.project/config.yaml` and add handles under `x-dom.targets`:
+## Config reference
 
 ```yaml
+chromePath: 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+headless: false        # false = visible window (avoids bot detection), true = headless
+schedule: "*/5 * * * *"
+
 adapters:
   x-dom:
     enabled: true
+    browser: chrome    # chrome | stagehand
     targets:
       - naval
       - base
-      - CoinbaseDev
 ```
 
-Restart `npm start` to pick up changes.
+Restart `npm start` to pick up config changes.

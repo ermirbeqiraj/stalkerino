@@ -1,6 +1,6 @@
-import type { Page } from "playwright";
 import { z } from "zod";
-import { type Adapter, type Item, createStagehand, isLoginPage } from "./base.ts";
+import { type Adapter, type Item, isLoginPage } from "./base.ts";
+import type { AdapterRunContext } from "./browser-manager.ts";
 
 const PostsSchema = z.object({
   posts: z.array(
@@ -17,23 +17,15 @@ const PostsSchema = z.object({
 const redditAdapter: Adapter = {
   id: "reddit",
 
-  async check(_page: Page, targets: string[]): Promise<Item[]> {
-    // Reddit is publicly accessible, but we still use stagehand for extraction.
-    // Session file is optional for Reddit — fall back to no-session if missing.
-    const stagehand = await createStagehand("reddit").catch(() => null);
-
-    // If no session, create a bare Stagehand without loading cookies
-    let sh = stagehand;
-    if (!sh) {
-      const { Stagehand } = await import("@browserbasehq/stagehand");
-      sh = new Stagehand({ env: "LOCAL", headless: true, verbose: 0, domSettleTimeoutMs: 3000 });
-      await sh.init();
+  async check(ctx: AdapterRunContext, targets: string[]): Promise<Item[]> {
+    if (ctx.mode !== "stagehand") {
+      throw new Error("reddit adapter requires browser: stagehand");
     }
+    const { stagehand: sh } = ctx;
 
     const items: Item[] = [];
 
-    try {
-      for (const target of targets) {
+    for (const target of targets) {
         // Normalise target: accept "r/javascript" or "javascript"
         const subreddit = target.startsWith("r/") ? target : `r/${target}`;
         const url = `https://www.reddit.com/${subreddit}/new`;
@@ -83,9 +75,6 @@ const redditAdapter: Adapter = {
           });
         }
       }
-    } finally {
-      await sh.close();
-    }
 
     return items;
   },

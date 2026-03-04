@@ -1,7 +1,7 @@
-import { chromium, type Page } from "playwright";
-import { Stagehand } from "@browserbasehq/stagehand";
+import { chromium } from "playwright";
 import path from "path";
 import fs from "fs";
+import type { AdapterRunContext } from "./browser-manager.ts";
 
 export interface Item {
   id: string;
@@ -12,47 +12,26 @@ export interface Item {
 
 export interface Adapter {
   id: string;
-  check(page: Page, targets: string[]): Promise<Item[]>;
+  check(ctx: AdapterRunContext, targets: string[]): Promise<Item[]>;
 }
 
 const SESSIONS_DIR = path.resolve(".sessions");
-const PROFILE_DIR = path.resolve(".chrome-profile");
 
-// Set once at startup by configureChrome() — required before any browser launch.
+// Stored by configureChrome() \u2014 only needed by login.ts for the CDP login flow.
+// The monitoring runner passes chromePath directly to BrowserManager.
 let chromeExecutablePath: string | null = null;
-let stagehandModelName: string = "gpt-4o-mini";
-let stagehandModelApiKey: string | null = null;
 
 /**
- * Must be called at startup before any browser launch.
- * runner.ts and login.ts both call this after reading chromePath from config.yaml.
- * Throws immediately if the path is empty — no silent fallback to bundled Chromium.
+ * Called by login.ts before a CDP login session.
+ * The monitoring runner does NOT need to call this.
  */
 export function configureChrome(executablePath: string): void {
   if (!executablePath) {
     throw new Error(
-      "chromePath is empty. Set it in .project/config.yaml to your system Chrome executable.\n" +
-        "  Windows: C:\Program Files\Google\Chrome\Application\chrome.exe\n" +
-        "  macOS:   /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n" +
-        "  Linux:   /usr/bin/google-chrome"
+      "chromePath is empty. Set it in .project/config.yaml to your system Chrome executable."
     );
   }
   chromeExecutablePath = executablePath;
-}
-
-export function configureModel(modelName: string, apiKey: string): void {
-  stagehandModelName = modelName;
-  stagehandModelApiKey = apiKey;
-}
-
-function requireChromePath(): string {
-  if (!chromeExecutablePath) {
-    throw new Error(
-      "Chrome executable path not configured. " +
-        "Ensure configureChrome() is called at startup (reads chromePath from config.yaml)."
-    );
-  }
-  return chromeExecutablePath;
 }
 
 export function sessionPath(adapterId: string): string {
@@ -110,63 +89,6 @@ export async function loginBrowserCDP(
   fs.writeFileSync(sessionPath(adapterId), JSON.stringify(state, null, 2), "utf-8");
   console.log(`[login] Session saved to ${sessionPath(adapterId)}`);
   await browser.close();
-}
-
-/**
- * Create a Playwright Page using system Chrome with the saved session profile.
- * Returns null if the session file does not exist.
- */
-export async function createPage(adapterId: string): Promise<Page | null> {
-  const executablePath = requireChromePath();
-  const sPath = sessionPath(adapterId);
-  if (!fs.existsSync(sPath)) {
-    console.error(`[${adapterId}] Session file not found: ${sPath}`);
-    return null;
-  }
-
-  const browser = await chromium.launch({
-    executablePath,
-    headless: true,
-  });
-
-  const context = await browser.newContext({ storageState: sPath });
-  const page = await context.newPage();
-  return page;
-}
-
-/**
- * Create a Stagehand instance using system Chrome with a loaded session.
- * Returns null if the session file does not exist.
- */
-export async function createStagehand(
-  adapterId: string
-): Promise<Stagehand | null> {
-  const executablePath = requireChromePath();
-  const sPath = sessionPath(adapterId);
-  if (!fs.existsSync(sPath)) {
-    console.error(`[${adapterId}] Session file not found: ${sPath}`);
-    return null;
-  }
-
-  const stagehand = new Stagehand({
-    env: "LOCAL",
-    headless: true,
-    verbose: 0,
-    domSettleTimeoutMs: 3000,
-    modelName: stagehandModelName as any,
-    modelClientOptions: { apiKey: stagehandModelApiKey ?? undefined },
-    localBrowserLaunchOptions: { executablePath } as any,
-  });
-
-  await stagehand.init();
-
-  // Inject saved session cookies into the Chrome context
-  const sessionData = JSON.parse(fs.readFileSync(sPath, "utf-8"));
-  if (sessionData.cookies?.length) {
-    await stagehand.context.addCookies(sessionData.cookies);
-  }
-
-  return stagehand;
 }
 
 /**

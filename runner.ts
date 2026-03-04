@@ -5,8 +5,7 @@ import cron from "node-cron";
 import { z } from "zod";
 import { configureTelegram, notifyItem, notifySessionError } from "./notify.ts";
 import type { Adapter, Item } from "./adapters/base.ts";
-import { configureChrome, configureModel } from "./adapters/base.ts";
-import { chromium } from "playwright";
+import { BrowserManager, type BrowserMode } from "./adapters/browser-manager.ts";
 
 // ---------------------------------------------------------------------------
 // Config schema
@@ -14,6 +13,7 @@ import { chromium } from "playwright";
 
 const AdapterConfigSchema = z.object({
   enabled: z.boolean().default(false),
+  browser: z.enum(["chrome", "stagehand"]).default("chrome"),
   targets: z.array(z.string()).default([]),
 });
 
@@ -23,6 +23,7 @@ const ConfigSchema = z.object({
     required_error:
       "chromePath is required in .project/config.yaml — set it to your system Chrome executable path.",
   }),
+  headless: z.boolean().default(false),
   modelName: z.string().default("gpt-4o-mini"),
   modelApiKey: z.string({
     required_error: "modelApiKey is required in .project/config.yaml — set it to your OpenAI API key.",
@@ -126,72 +127,71 @@ async function runAdapters(config: Config): Promise<void> {
   const state = loadState();
   const stateUpdates: State = { ...state };
 
-  // Dummy browser/page — adapters manage their own browsers via createStagehand.
-  // The page arg exists to satisfy the Adapter interface signature.
-  const browser = await chromium.launch({
-    executablePath: config.chromePath,
-    headless: true,
-  });
-  const dummyPage = await browser.newPage();
-
   const enabledAdapters = Object.entries(config.adapters).filter(
     ([, cfg]) => cfg.enabled
   );
 
   if (enabledAdapters.length === 0) {
     console.log("[runner] No adapters enabled.");
-    await browser.close();
     return;
   }
 
-  for (const [id, adapterConfig] of enabledAdapters) {
-    console.log(`[runner] Running adapter: ${id}`);
+  const manager = new BrowserManager({
+    chromePath: config.chromePath,
+    headless: config.headless,
+    modelName: config.modelName,
+    modelApiKey: config.modelApiKey,
+  });
 
-    const adapter = await loadAdapter(id);
-    if (!adapter) continue;
+  try {
+    for (const [id, adapterConfig] of enabledAdapters) {
+      console.log(`[runner] Running adapter: ${id} (browser: ${adapterConfig.browser})`);
 
-    try {
-      const items: Item[] = await adapter.check(dummyPage, adapterConfig.targets);
+      const adapter = await loadAdapter(id);
+      if (!adapter) continue;
 
-      let newCount = 0;
-      for (const item of items) {
-        // Always mark every returned item as seen — even if already known —
-        // so that items still on the page are never re-notified after a trim.
-        const alreadySeen = !!state[item.id];
-        stateUpdates[item.id] = item.id;
+      try {
+        const ctx = await manager.getContext(id, adapterConfig.browser as BrowserMode);
+        const items: Item[] = await adapter.check(ctx, adapterConfig.targets);
 
-        if (alreadySeen) continue;
+        let newCount = 0;
+        for (const item of items) {
+          const alreadySeen = !!state[item.id];
+          stateUpdates[item.id] = item.id;
 
-        newCount++;
-        console.log(`[${id}] New item: ${item.id}`);
+          if (alreadySeen) continue;
 
-        const target = (item.meta?.target as string | undefined) ?? id;
-        await notifyItem({ adapterId: id, target, content: item.content, url: item.url });
-      }
+          newCount++;
+          console.log(`[${id}] New item: ${item.id}`);
 
-      if (newCount === 0) {
-        console.log(`[${id}] No new items.`);
-      } else {
-        console.log(`[${id}] Notified ${newCount} new item(s).`);
-      }
+          const target = (item.meta?.target as string | undefined) ?? id;
+          await notifyItem({ adapterId: id, target, content: item.content, url: item.url });
+        }
 
-      saveState(stateUpdates);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[${id}] Adapter error:`, message);
+        if (newCount === 0) {
+          console.log(`[${id}] No new items.`);
+        } else {
+          console.log(`[${id}] Notified ${newCount} new item(s).`);
+        }
 
-      const isSessionError =
-        message.toLowerCase().includes("session") ||
-        message.toLowerCase().includes("login") ||
-        message.toLowerCase().includes("redirect");
+        saveState(stateUpdates);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[${id}] Adapter error:`, message);
 
-      if (isSessionError) {
-        await notifySessionError(id, message);
+        const isSessionError =
+          message.toLowerCase().includes("session") ||
+          message.toLowerCase().includes("login") ||
+          message.toLowerCase().includes("redirect");
+
+        if (isSessionError) {
+          await notifySessionError(id, message);
+        }
       }
     }
+  } finally {
+    await manager.closeAll();
   }
-
-  await browser.close();
 }
 
 // ---------------------------------------------------------------------------
@@ -201,11 +201,7 @@ async function runAdapters(config: Config): Promise<void> {
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  // Make the Chrome path available to base.ts helpers (createStagehand, loginBrowser, etc.)
-  configureChrome(config.chromePath);
   console.log(`[runner] Using Chrome: ${config.chromePath}`);
-
-  configureModel(config.modelName, config.modelApiKey);
   console.log(`[runner] Using model: ${config.modelName}`);
 
   if (config.notifications.telegram) {

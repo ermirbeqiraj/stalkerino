@@ -1,6 +1,6 @@
-import type { Page } from "playwright";
 import { z } from "zod";
-import { type Adapter, type Item, createStagehand, isLoginPage } from "./base.ts";
+import { type Adapter, type Item, isLoginPage } from "./base.ts";
+import type { AdapterRunContext } from "./browser-manager.ts";
 
 const PostSchema = z.object({
   posts: z.array(
@@ -16,16 +16,14 @@ const PostSchema = z.object({
 const xAdapter: Adapter = {
   id: "x",
 
-  async check(_page: Page, targets: string[]): Promise<Item[]> {
-    const stagehand = await createStagehand("x");
-    if (!stagehand) {
-      throw new Error("Session not available — run: npm run login x");
+  async check(ctx: AdapterRunContext, targets: string[]): Promise<Item[]> {
+    if (ctx.mode !== "stagehand") {
+      throw new Error("x adapter requires browser: stagehand");
     }
-
+    const { stagehand } = ctx;
     const items: Item[] = [];
 
-    try {
-      for (const target of targets) {
+    for (const target of targets) {
         const profileUrl = `https://x.com/${target}`;
         console.log(`[x] Checking ${profileUrl}`);
 
@@ -81,9 +79,6 @@ const xAdapter: Adapter = {
           });
         }
       }
-    } finally {
-      await stagehand.close();
-    }
 
     return items;
   },
