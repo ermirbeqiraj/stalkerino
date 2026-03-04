@@ -81,20 +81,26 @@ function loadState(): State {
 }
 
 function saveState(state: State): void {
-  // Keep only the last 5 seen IDs per adapter:target to prevent unbounded growth.
-  // IDs are stored in insertion order, so we just keep the tail.
-  const grouped: Record<string, string[]> = {};
-  for (const key of Object.keys(state)) {
-    // key format: "adapter:target:postId"
-    const prefix = key.split(":").slice(0, 2).join(":");
-    (grouped[prefix] ??= []).push(key);
-  }
+  // Prune entries whose post ID (snowflake) is older than 48 hours.
+  // Snowflake timestamp: (BigInt(id) >> 22n) + TWITTER_EPOCH_MS
+  const TWITTER_EPOCH = 1288834974657n;
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+
   const trimmed: State = {};
-  for (const keys of Object.values(grouped)) {
-    for (const k of keys.slice(-5)) {
-      trimmed[k] = k;
+  for (const [key, val] of Object.entries(state)) {
+    // key format: "adapter:target:postId"
+    const postId = key.split(":").at(-1) ?? "";
+    try {
+      const postMs = Number((BigInt(postId) >> 22n) + TWITTER_EPOCH);
+      if (postMs >= cutoff) {
+        trimmed[key] = val;
+      }
+    } catch {
+      // Non-snowflake key (e.g. from other adapters) — keep it
+      trimmed[key] = val;
     }
   }
+
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
   fs.writeFileSync(STATE_PATH, JSON.stringify(trimmed, null, 2), "utf-8");
 }

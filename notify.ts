@@ -2,6 +2,22 @@ import fs from "fs";
 import path from "path";
 
 const LOG_PATH = path.resolve(".project/notifications.log");
+const LOG_MAX_BYTES = 500 * 1024; // 500 KB
+
+function appendToLog(entry: string): void {
+  fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+
+  // Roll: if file exceeds limit, keep only the second half (drop oldest entries)
+  if (fs.existsSync(LOG_PATH)) {
+    const size = fs.statSync(LOG_PATH).size;
+    if (size > LOG_MAX_BYTES) {
+      const content = fs.readFileSync(LOG_PATH, "utf-8");
+      fs.writeFileSync(LOG_PATH, content.slice(Math.floor(content.length / 2)), "utf-8");
+    }
+  }
+
+  fs.appendFileSync(LOG_PATH, entry, "utf-8");
+}
 
 export interface NotifyOptions {
   adapterId: string;
@@ -22,8 +38,7 @@ export async function notify(message: string): Promise<void> {
   // Always append to log file regardless of Telegram config
   const timestamp = new Date().toISOString();
   const logEntry = `[${timestamp}]\n${message}\n${"─".repeat(60)}\n`;
-  fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
-  fs.appendFileSync(LOG_PATH, logEntry, "utf-8");
+  appendToLog(logEntry);
 
   if (!telegramToken || !telegramChatId) {
     console.warn("[notify] Telegram not configured — skipping notification");
