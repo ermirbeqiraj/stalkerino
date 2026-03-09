@@ -6,7 +6,7 @@ import type { AdapterRunContext } from "./browser-manager.ts";
 export interface Item {
   id: string;
   content: string;
-  url?: string;
+  url: string;
   meta?: Record<string, unknown>;
 }
 

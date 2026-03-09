@@ -3,7 +3,7 @@ import path from "path";
 import yaml from "js-yaml";
 import cron from "node-cron";
 import { z } from "zod";
-import { configureTelegram, notifyItem, notifySessionError } from "./notify.ts";
+import { configureTelegram, configureFileOutput, notifyItem, notifySessionError } from "./notify.ts";
 import type { Adapter, Item } from "./adapters/base.ts";
 import { BrowserManager, type BrowserMode } from "./adapters/browser-manager.ts";
 import { FirebaseStateStore, type StateStore, type State } from "./state-store.ts";
@@ -36,8 +36,15 @@ const ConfigSchema = z.object({
     .object({
       telegram: z
         .object({
+          enabled: z.boolean().default(true),
           token: z.string(),
           chat_id: z.string(),
+        })
+        .optional(),
+      file: z
+        .object({
+          enabled: z.boolean().default(true),
+          dir: z.string(),
         })
         .optional(),
     })
@@ -122,7 +129,7 @@ async function runAdapters(config: Config, store: StateStore): Promise<void> {
           newCount++;
           console.log(`[${id}] New item: ${item.id}`);
 
-          await notifyItem({ adapterId: id, target, content: item.content, url: item.url });
+          await notifyItem({ adapterId: id, itemId: item.id, target, content: item.content, url: item.url });
         }
 
         if (newCount === 0) {
@@ -157,12 +164,18 @@ async function main(): Promise<void> {
   console.log(`[runner] Using Chrome: ${config.chromePath}`);
   console.log(`[runner] Using model: ${config.modelName}`);
 
-  if (config.notifications.telegram) {
+  if (config.notifications.telegram?.enabled) {
     const { token, chat_id } = config.notifications.telegram;
     configureTelegram(token, chat_id);
     console.log("[runner] Telegram notifications configured.");
   } else {
-    console.warn("[runner] No Telegram config — notifications will be skipped.");
+    console.warn("[runner] Telegram notifications disabled.");
+  }
+
+  if (config.notifications.file?.enabled) {
+    const { dir } = config.notifications.file;
+    configureFileOutput(dir);
+    console.log(`[runner] File output configured: ${dir}`);
   }
 
   const store = new FirebaseStateStore(config.firebaseUrl, config.firebaseSecret);

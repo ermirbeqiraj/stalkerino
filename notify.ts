@@ -20,18 +20,29 @@ function appendToLog(entry: string): void {
 
 export interface NotifyOptions {
   adapterId: string;
+  itemId: string;
   target: string;
   content: string;
-  url?: string;
+  url: string;
 }
 
 let telegramToken: string | undefined;
 let telegramChatId: string | undefined;
+let fileOutputDir: string | undefined;
 
 export function configureTelegram(token: string, chatId: string): void {
   telegramToken = token;
   telegramChatId = chatId;
 }
+
+export function configureFileOutput(dir: string): void {
+  fileOutputDir = dir;
+}
+
+const PLATFORM_MAP: Record<string, string> = {
+  "x-dom": "twitter",
+  "reddit": "reddit",
+};
 
 export async function notify(message: string): Promise<void> {
   const timestamp = new Date().toISOString();
@@ -80,14 +91,28 @@ export function buildMessage(opts: NotifyOptions): string {
     escapeHtml(opts.content),
   ];
 
-  if (opts.url) {
-    lines.push(``, opts.url);
-  }
+  lines.push(``, opts.url);
 
   return lines.join("\n");
 }
 
 export async function notifyItem(opts: NotifyOptions): Promise<void> {
+  if (fileOutputDir) {
+    const platform = PLATFORM_MAP[opts.adapterId] ?? opts.adapterId;
+    const payload = {
+      id: opts.itemId,
+      author: opts.target,
+      content: opts.content,
+      platform,
+      url: opts.url,
+    };
+    const safeId = opts.itemId.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = path.join(fileOutputDir, `${safeId}.json`);
+    fs.mkdirSync(fileOutputDir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
+    console.log(`[notify] Written to file: ${filePath}`);
+  }
+
   const message = buildMessage(opts);
   await notify(message);
 }

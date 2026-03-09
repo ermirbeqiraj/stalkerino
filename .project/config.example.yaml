@@ -40,6 +40,12 @@ adapters:
       - r/javascript
 
 notifications:
+  # Write each new item as a JSON file to a local directory
+  file:
+    enabled: false
+    dir: 'C:\path\to\output-dir'
+  # Send notifications via Telegram bot
   telegram:
+    enabled: false
     token: "YOUR_TELEGRAM_BOT_TOKEN"
     chat_id: "YOUR_CHAT_ID"
