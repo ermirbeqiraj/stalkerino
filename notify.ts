@@ -99,14 +99,14 @@ export function buildMessage(opts: NotifyOptions): string {
 export async function notifyItem(opts: NotifyOptions): Promise<void> {
   if (fileOutputDir) {
     const platform = PLATFORM_MAP[opts.adapterId] ?? opts.adapterId;
+    const safeId = opts.itemId.replace(/[^a-zA-Z0-9._-]/g, "-");
     const payload = {
-      id: opts.itemId,
+      id: safeId,
       author: opts.target,
       content: opts.content,
       platform,
       url: opts.url,
     };
-    const safeId = opts.itemId.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filePath = path.join(fileOutputDir, `${safeId}.json`);
     fs.mkdirSync(fileOutputDir, { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
